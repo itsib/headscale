@@ -8,26 +8,29 @@ RUN go mod download
 
 COPY . .
 
-RUN env
-
 RUN CGO_ENABLED=0 GOOS=linux GOBIN=/go/bin go install \
     -ldflags="-s -w -X github.com/juanfont/headscale/cmd/headscale/cli.Version=$VERSION" \
     ./cmd/headscale
 
-#FROM ubuntu:22.04
-#
-#RUN mkdir -p /var/run/headscale
-#
-#COPY --from=build /usr/share/headscale /usr/bin
+FROM ubuntu:22.04
 
-#ENTRYPOINT [ "/usr/local/bin/headscale" ]
+COPY <<EOF /etc/profile.d/headscale.sh
+alias hs="headscale"
+EOF
 
-#CMD ["headscale", "serve"]
+RUN mkdir -p /var/run/headscale
+
+COPY --from=build /go/bin/headscale /usr/bin
+
+ENTRYPOINT []
+
+EXPOSE 8080/tcp
+
+CMD ["headscale", "serve"]
 
 
 
-#
-#
+
 #
 #RUN apt-get update \
 #  && apt-get install --no-install-recommends --yes less jq sqlite3 dnsutils \

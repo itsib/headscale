@@ -24,6 +24,7 @@ import (
 	grpcRuntime "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/juanfont/headscale"
 	v1 "github.com/juanfont/headscale/gen/go/headscale/v1"
+	"github.com/juanfont/headscale/hscontrol/capver"
 	"github.com/juanfont/headscale/hscontrol/db"
 	"github.com/juanfont/headscale/hscontrol/derp"
 	derpServer "github.com/juanfont/headscale/hscontrol/derp/server"
@@ -96,7 +97,7 @@ type Headscale struct {
 	mapper       *mapper.Mapper
 	nodeNotifier *notifier.Notifier
 
-	registrationCache *zcache.Cache[string, types.Node]
+	registrationCache *zcache.Cache[types.RegistrationID, types.RegisterNode]
 
 	authProvider AuthProvider
 
@@ -123,7 +124,7 @@ func NewHeadscale(cfg *types.Config) (*Headscale, error) {
 		return nil, fmt.Errorf("failed to read or create Noise protocol private key: %w", err)
 	}
 
-	registrationCache := zcache.New[string, types.Node](
+	registrationCache := zcache.New[types.RegistrationID, types.RegisterNode](
 		registerCacheExpiration,
 		registerCacheCleanup,
 	)
@@ -462,7 +463,7 @@ func (h *Headscale) createRouter(grpcMux *grpcRuntime.ServeMux) *mux.Router {
 
 	router.HandleFunc("/health", h.HealthHandler).Methods(http.MethodGet)
 	router.HandleFunc("/key", h.KeyHandler).Methods(http.MethodGet)
-	router.HandleFunc("/register/{mkey}", h.authProvider.RegisterHandler).Methods(http.MethodGet)
+	router.HandleFunc("/register/{registration_id}", h.authProvider.RegisterHandler).Methods(http.MethodGet)
 
 	if provider, ok := h.authProvider.(*AuthProviderOIDC); ok {
 		router.HandleFunc("/oidc/callback", provider.OIDCCallbackHandler).Methods(http.MethodGet)
@@ -559,6 +560,11 @@ func (h *Headscale) Serve() error {
 	if dumpConfig {
 		spew.Dump(h.cfg)
 	}
+
+	log.Info().
+		Caller().
+		Str("minimum_version", capver.TailscaleVersion(MinimumCapVersion)).
+		Msg("Clients with a lower minimum version will be rejected")
 
 	// Fetch an initial DERP Map before we start serving
 	h.DERPMap = derp.GetDERPMap(h.cfg.DERP)

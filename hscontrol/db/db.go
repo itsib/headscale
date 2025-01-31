@@ -41,7 +41,7 @@ type KV struct {
 type HSDatabase struct {
 	DB       *gorm.DB
 	cfg      *types.DatabaseConfig
-	regCache *zcache.Cache[string, types.Node]
+	regCache *zcache.Cache[types.RegistrationID, types.RegisterNode]
 
 	baseDomain string
 }
@@ -51,7 +51,7 @@ type HSDatabase struct {
 func NewHeadscaleDatabase(
 	cfg types.DatabaseConfig,
 	baseDomain string,
-	regCache *zcache.Cache[string, types.Node],
+	regCache *zcache.Cache[types.RegistrationID, types.RegisterNode],
 ) (*HSDatabase, error) {
 	dbConn, err := openDB(cfg)
 	if err != nil {
@@ -560,6 +560,14 @@ COMMIT;
 					// Remove any invalid routes associated with a node that does not exist.
 					if tx.Migrator().HasTable(&types.Route{}) && tx.Migrator().HasTable(&types.Node{}) {
 						err := tx.Exec("delete from routes where node_id not in (select id from nodes)").Error
+						if err != nil {
+							return err
+						}
+					}
+
+					// Remove any invalid routes without a node_id.
+					if tx.Migrator().HasTable(&types.Route{}) {
+						err := tx.Exec("delete from routes where node_id is null").Error
 						if err != nil {
 							return err
 						}
